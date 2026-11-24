@@ -18,11 +18,16 @@ const GROQ_KEYS = keyList(process.env.GROQ_API_KEYS);
 const GROQ_BASE = process.env.GROQ_BASE || 'https://api.groq.com/openai/v1/chat/completions';
 const GROQ_MODEL = process.env.GROQ_SEARCH_MODEL || 'openai/gpt-oss-120b';
 const HAS_SEARCH = GROQ_KEYS.length > 0;
-// Gmail API credentials (OAuth2 Refresh Token) for reading and searching emails by voice/keyboard
+// Gmail API credentials (OAuth2 Refresh Token) for full Gmail access by voice/keyboard
 const GMAIL_CLIENT_ID = String(process.env.GMAIL_CLIENT_ID || '').trim();
 const GMAIL_CLIENT_SECRET = String(process.env.GMAIL_CLIENT_SECRET || '').trim();
 const GMAIL_REFRESH_TOKEN = String(process.env.GMAIL_REFRESH_TOKEN || '').trim();
 const HAS_GMAIL = Boolean(GMAIL_CLIENT_ID && GMAIL_CLIENT_SECRET && GMAIL_REFRESH_TOKEN);
+// Google Contacts (People API) credentials (falls back to Gmail OAuth credentials when dedicated contact vars are omitted)
+const CONTACTS_CLIENT_ID = String(process.env.CONTACTS_CLIENT_ID || process.env.GOOGLE_CLIENT_ID || GMAIL_CLIENT_ID).trim();
+const CONTACTS_CLIENT_SECRET = String(process.env.CONTACTS_CLIENT_SECRET || process.env.GOOGLE_CLIENT_SECRET || GMAIL_CLIENT_SECRET).trim();
+const CONTACTS_REFRESH_TOKEN = String(process.env.CONTACTS_REFRESH_TOKEN || process.env.GOOGLE_REFRESH_TOKEN || GMAIL_REFRESH_TOKEN).trim();
+const HAS_CONTACTS = Boolean(CONTACTS_CLIENT_ID && CONTACTS_CLIENT_SECRET && CONTACTS_REFRESH_TOKEN);
 // Jamendo: free music API (full songs, free license); register at developer.jamendo.com for a client id
 const JAMENDO_ID = String(process.env.JAMENDO_CLIENT_ID || '').trim();
 const JAMENDO_BASE = process.env.JAMENDO_BASE || 'https://api.jamendo.com/v3.0';
@@ -54,7 +59,8 @@ const sp = s => String(s).replace(/[.\-"'&|,=]/g, ' ').replace(/\s+/g, ' ').trim
 // the user can change the voice or pace by speaking; the model signals it with a tag that the server strips before read-aloud
 const VOICE_CTL = ' אם המשתמש מבקש לשנות את הקול, את קצב הדיבור או את אורך התשובות, התחל את התשובה בתג מתאים ואחריו אשר בקצרה במשפט אחד. התגים: [[VOICE:male]] לקול גברי, [[VOICE:female]] לקול נשי, [[VOICE:default]] לקול הרגיל, [[PACE:slow]] לדיבור לאט, [[PACE:fast]] לדיבור מהר, [[PACE:normal]] לקצב רגיל, [[LEN:short]] כשהמשתמש מבקש תשובות קצרות יותר, למשל: קצר את התשובה, תקצר, תענה קצר, בקצרה, בקיצור, [[LEN:long]] כשהוא מבקש לחזור לתשובות מפורטות או להרחיב. בקשה כזאת מתייחסת תמיד לאורך התשובות שלך ולא לחפץ או לנושא כלשהו, גם כשהיא מופיעה באותו משפט עם שאלה, ואז ענה על השאלה בקצרה. בקשת המשתמש לגבי אורך התשובה גוברת על כל הנחיית אורך אחרת, ולכן כבר בתשובה הזאת עצמה ענה לפי הבקשה החדשה, ואם יש בבקשה גם שאלה ענה עליה. אפשר לשלב כמה תגים. זה היוצא מן הכלל היחיד לכלל הסימנים המיוחדים. השתמש בתגים רק כשהמשתמש ביקש במפורש שינוי כזה, ולעולם אל תזכיר אותם בטקסט אחר.';
 const SEARCH_HINT = ' יש לך כלי חיפוש באינטרנט בשם web_search. הפעל אותו אם צריך לחפש באינטרנט או באתר מסוים. אם הוא ביקש אתר מסוים, העבר את שמו בשדה site. אם הוא ביקש משהו שלא מצריך חיפוש ענה מהידע שלך בלי להשתמש בכלי, אחרי החיפוש ענה בקצרה בלי להקריא כתובות אתרים.';
-const GMAIL_HINT = ' יש לך כלי גישה למייל בשם gmail_unread לבדיקת מיילים שלא נקראו, וכלי gmail_search לחיפוש מיילים לפי שולח או נושא, וכלי gmail_read לקריאה או סיכום של תוכן מייל מתוך הרשימה שנשלפה. אם המשתמש שואל על מיילים חדשים או שלא נקראו, הפעל gmail_unread וספר בקצרה כמה יש, ממי ומה הנושא. אם הוא מבקש לחפש מייל מסוים, הפעל gmail_search. אם הוא מבקש לדעת מה כתוב או מה תוכן המייל, הפעל gmail_read וסכם או הקרא את תוכנו בקצרה ובעברית ברורה.';
+const GMAIL_HINT = ' יש לך גישה מלאה למייל עם הכלים הבאים: gmail_unread לבדיקת מיילים שלא נקראו, gmail_search לחיפוש מיילים לפי שולח או נושא, gmail_read לקריאה או סיכום של תוכן מייל מתוך הרשימה שנשלפה, gmail_send לשליחת מייל, gmail_draft לשמירת טיוטה, gmail_mark_read לסימון מייל כנקרא או לא נקרא, gmail_trash להעברת מייל לאשפה, ו-gmail_delete למחיקת מייל לצמיתות. אם המשתמש שואל על מיילים חדשים או שלא נקראו, הפעל gmail_unread וספר בקצרה כמה יש, ממי ומה הנושא. אם הוא מבקש לחפש מייל מסוים, הפעל gmail_search. אם הוא מבקש לדעת מה כתוב במייל, הפעל gmail_read וסכם או הקרא את תוכנו בקצרה ובעברית ברורה. לפני שליחת מייל (gmail_send) או מחיקה לצמיתות (gmail_delete), קרא בקצרה את פרטי הפעולה ובקש אישור מפורש מהמשתמש, ורק לאחר אישורו הפעל את הכלי. עבור העברה לאשפה (gmail_trash), סימון כנקרא (gmail_mark_read) או שמירת טיוטה (gmail_draft) אפשר לבצע מיד לפי בקשת המשתמש.';
+const CONTACTS_HINT = ' יש לך כלי גישה לאנשי קשר בשם contacts_search לחיפוש איש קשר לפי שם, טלפון או מייל, וכלי contacts_create ליצירת איש קשר חדש. אם המשתמש מחפש מספר טלפון או כתובת מייל של אדם, הפעל contacts_search והקרא בקצרה את הפרטים שנמצאו. אם המשתמש מבקש להוסיף איש קשר, הפעל contacts_create עם הפרטים שנמסרו.';
 const FOUND_HINT = ' יש לך גם כלי search_media לחיפוש שירים וקבצי שמע ווידאו שאפשר להאזין להם, וכלי play_found להשמעת אחת התוצאות. אם המשתמש ביקש לחפש או לראות שירים או קבצים להשמעה, הפעל search_media עם שאילתה קצרה. אחרי שקיבלת את התוצאות הקרא אותן בקצרה, כל אחת עם מספר במילים ואחריו השם, ושאל איזו לנגן. כשהמשתמש מבקש לנגן אחת מהן, לפי מספר או לפי שם, הפעל play_found עם המספר, ואז אמור משפט קצר אחד שאתה מנגן עכשיו. אל תקריא כתובות.';
 // audio or video files from the internet that the caller can ask to play ("נגן את הקובץ"); the owner lists them in MEDIA_FILES: [{"n":"name","u":"https://.../file.mp3"}]
 let MEDIA = [];
@@ -79,7 +85,7 @@ const buildSys = (mode, extra) => 'אתה עוזר קולי בטלפון. כלל
   ' ענה בעברית כמו ג׳מיני: תשובה עניינית מדויקת בלי אריכות מיותרת כשלא צריך, תשובה זורמת ורכה לאוזן, בשפה טבעית של דיבור ובפסקאות קצרות. וכשצריך אז הרחב והסבר את הרקע, תן דוגמאות, פרטים והקשר, והשלם את התמונה בלי למהר ובלי לקצר. אורך התשובה הוא עד ' + MAXW + ' מילים. רק לברכה או למשפט שיחתי קצר ענה בקצרה. בלי רשימות, בלי כוכביות ובלי סימנים מיוחדים, כך שיהיה נעים להקשיב לה בטלפון. המשתמש יכול לעצור את התשובה בכל רגע בהקשה על מקש ולהמשיך את השיחה, לכן שאלות המשך מתייחסות לתשובה הקודמת שלך. ' +
   (EXTRA ? 'הנחיה כללית מהבעלים: ' + EXTRA + ' ' : '') +
 
-  (extra ? 'הנחיה לשלוחה הזאת מהבעלים: ' + extra + ' ' : '') + VOICE_CTL + TRANSCRIBE_HINT + (HAS_SEARCH ? SEARCH_HINT : '') + (HAS_GMAIL ? GMAIL_HINT : '') + (HAS_FOUND ? FOUND_HINT : '') + (HAS_MEDIA ? MEDIA_HINT : '');
+  (extra ? 'הנחיה לשלוחה הזאת מהבעלים: ' + extra + ' ' : '') + VOICE_CTL + TRANSCRIBE_HINT + (HAS_SEARCH ? SEARCH_HINT : '') + (HAS_GMAIL ? GMAIL_HINT : '') + (HAS_CONTACTS ? CONTACTS_HINT : '') + (HAS_FOUND ? FOUND_HINT : '') + (HAS_MEDIA ? MEDIA_HINT : '');
 
 // one entry per Yemot extension: its own character mode, extra instruction and opening message
 let CFG = [];
@@ -239,26 +245,43 @@ async function webSearch(query, site, deadline) {
   return groqSearch(query, site, deadline);
 }
 
-// ---------- Gmail API tools: check unread emails, search emails, and read email body ----------
-async function getGmailAccessToken(deadline) {
+// ---------- OAuth2 token helper for Google APIs (Gmail + Contacts) ----------
+async function exchangeRefreshToken(clientId, clientSecret, refreshToken, deadline) {
   const r = await http('https://oauth2.googleapis.com/token', {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({
-      client_id: GMAIL_CLIENT_ID,
-      client_secret: GMAIL_CLIENT_SECRET,
-      refresh_token: GMAIL_REFRESH_TOKEN,
+      client_id: clientId,
+      client_secret: clientSecret,
+      refresh_token: refreshToken,
       grant_type: 'refresh_token'
     })
   }, 10000, deadline);
   const j = await r.json().catch(() => ({}));
-  if (!r.ok || !j.access_token) throw new Error('gmail token ' + r.status + ' ' + JSON.stringify(j).slice(0, 150));
+  if (!r.ok || !j.access_token) throw new Error('google token ' + r.status + ' ' + JSON.stringify(j).slice(0, 150));
   return j.access_token;
+}
+
+// ---------- Gmail API tools: read, search, send, draft, mark read/unread, trash, and delete ----------
+async function getGmailAccessToken(deadline) {
+  return exchangeRefreshToken(GMAIL_CLIENT_ID, GMAIL_CLIENT_SECRET, GMAIL_REFRESH_TOKEN, deadline);
 }
 
 function decodeB64Url(str) {
   const norm = String(str || '').replace(/-/g, '+').replace(/_/g, '/');
   return Buffer.from(norm, 'base64').toString('utf8');
+}
+
+function encodeB64Url(str) {
+  return Buffer.from(String(str || ''), 'utf8')
+    .toString('base64')
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=+$/g, '');
+}
+
+function sanitizeHeader(val) {
+  return String(val || '').replace(/[\r\n]+/g, ' ').trim();
 }
 
 function stripMailHtml(html) {
@@ -289,6 +312,13 @@ function extractMailBody(payload) {
   return (plain || html || payload.snippet || '').replace(/\s+/g, ' ').trim().slice(0, 1800);
 }
 
+function resolveCachedMail(s, number) {
+  const emails = (s && s.lastEmails) || [];
+  const idx = Number(number || 0);
+  if (idx < 1 || !emails[idx - 1]) return null;
+  return { idx, mail: emails[idx - 1] };
+}
+
 async function queryGmail(s, q, maxResults, deadline) {
   if (!HAS_GMAIL) return { error: 'gmail not configured' };
   const token = await getGmailAccessToken(deadline);
@@ -307,6 +337,7 @@ async function queryGmail(s, q, maxResults, deadline) {
     const getH = n => (hdrs.find(h => String(h.name || '').toLowerCase() === n.toLowerCase()) || {}).value || '';
     return {
       id,
+      threadId: msg.threadId || '',
       from: getH('From'),
       subject: getH('Subject') || '(ללא נושא)',
       date: getH('Date'),
@@ -331,11 +362,180 @@ async function readCachedMail(s, index, deadline) {
   const idx = Number(index || 0);
   if (idx >= 1 && emails[idx - 1]) {
     const m = emails[idx - 1];
-    return { number: idx, from: m.from, subject: m.subject, body: m.body };
+    return { number: idx, threadId: m.threadId, from: m.from, subject: m.subject, body: m.body };
   }
   return {
-    emails: emails.slice(0, 4).map((m, i) => ({ number: i + 1, from: m.from, subject: m.subject, body: m.body.slice(0, 700) }))
+    emails: emails.slice(0, 4).map((m, i) => ({ number: i + 1, threadId: m.threadId, from: m.from, subject: m.subject, body: m.body.slice(0, 700) }))
   };
+}
+
+function buildRawMime(to, subject, body) {
+  const cleanTo = sanitizeHeader(to);
+  const cleanSubject = sanitizeHeader(subject || '(ללא נושא)');
+  const cleanBody = String(body || '').trim();
+  const encodedSubj = '=?UTF-8?B?' + Buffer.from(cleanSubject, 'utf8').toString('base64') + '?=';
+  const rawLines = [
+    ...(cleanTo ? ['To: ' + cleanTo] : []),
+    'Subject: ' + encodedSubj,
+    'MIME-Version: 1.0',
+    'Content-Type: text/plain; charset=UTF-8',
+    'Content-Transfer-Encoding: 8bit',
+    '',
+    cleanBody
+  ];
+  return { cleanTo, cleanSubject, cleanBody, raw: encodeB64Url(rawLines.join('\r\n')) };
+}
+
+async function sendGmail(to, subject, body, threadId, deadline) {
+  if (!HAS_GMAIL) return { error: 'gmail not configured' };
+  const mime = buildRawMime(to, subject, body);
+  if (!mime.cleanTo || !/^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+$/.test(mime.cleanTo)) return { error: 'invalid recipient email' };
+  if (!mime.cleanBody) return { error: 'empty email body' };
+  const token = await getGmailAccessToken(deadline);
+  const payload = { raw: mime.raw };
+  if (threadId && /^[A-Za-z0-9_-]+$/.test(String(threadId))) payload.threadId = String(threadId);
+  const r = await http('https://gmail.googleapis.com/gmail/v1/users/me/messages/send', {
+    method: 'POST',
+    headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  }, 12000, deadline);
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok || !j.id) throw new Error('gmail send ' + r.status + ' ' + JSON.stringify(j).slice(0, 150));
+  return { sent: true, id: j.id, to: mime.cleanTo, subject: mime.cleanSubject };
+}
+
+async function createGmailDraft(to, subject, body, threadId, deadline) {
+  if (!HAS_GMAIL) return { error: 'gmail not configured' };
+  const mime = buildRawMime(to, subject, body);
+  if (mime.cleanTo && !/^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+$/.test(mime.cleanTo)) return { error: 'invalid recipient email' };
+  if (!mime.cleanBody && !mime.cleanSubject) return { error: 'empty draft' };
+  const token = await getGmailAccessToken(deadline);
+  const message = { raw: mime.raw };
+  if (threadId && /^[A-Za-z0-9_-]+$/.test(String(threadId))) message.threadId = String(threadId);
+  const r = await http('https://gmail.googleapis.com/gmail/v1/users/me/drafts', {
+    method: 'POST',
+    headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ message })
+  }, 12000, deadline);
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok || !j.id) throw new Error('gmail draft ' + r.status + ' ' + JSON.stringify(j).slice(0, 150));
+  return { drafted: true, id: j.id, to: mime.cleanTo || '(ללא נמען)', subject: mime.cleanSubject };
+}
+
+async function trashGmail(s, number, deadline) {
+  if (!HAS_GMAIL) return { error: 'gmail not configured' };
+  const found = resolveCachedMail(s, number);
+  if (!found) return { error: 'email not found in current list; search or check unread first' };
+  const token = await getGmailAccessToken(deadline);
+  const r = await http('https://gmail.googleapis.com/gmail/v1/users/me/messages/' + found.mail.id + '/trash', {
+    method: 'POST',
+    headers: { Authorization: 'Bearer ' + token }
+  }, 12000, deadline);
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error('gmail trash ' + r.status + ' ' + JSON.stringify(j).slice(0, 150));
+  return { trashed: true, number: found.idx, subject: found.mail.subject, from: found.mail.from };
+}
+
+async function deleteGmailPermanently(s, number, deadline) {
+  if (!HAS_GMAIL) return { error: 'gmail not configured' };
+  const found = resolveCachedMail(s, number);
+  if (!found) return { error: 'email not found in current list; search or check unread first' };
+  const token = await getGmailAccessToken(deadline);
+  const r = await http('https://gmail.googleapis.com/gmail/v1/users/me/messages/' + found.mail.id, {
+    method: 'DELETE',
+    headers: { Authorization: 'Bearer ' + token }
+  }, 12000, deadline);
+  if (!r.ok) {
+    const t = await r.text().catch(() => '');
+    throw new Error('gmail delete ' + r.status + ' ' + t.slice(0, 150));
+  }
+  s.lastEmails.splice(found.idx - 1, 1);
+  return { deleted: true, subject: found.mail.subject, from: found.mail.from };
+}
+
+async function markGmailReadState(s, number, read, deadline) {
+  if (!HAS_GMAIL) return { error: 'gmail not configured' };
+  const found = resolveCachedMail(s, number);
+  if (!found) return { error: 'email not found in current list; search or check unread first' };
+  const token = await getGmailAccessToken(deadline);
+  const isRead = read !== false;
+  const payload = isRead ? { removeLabelIds: ['UNREAD'] } : { addLabelIds: ['UNREAD'] };
+  const r = await http('https://gmail.googleapis.com/gmail/v1/users/me/messages/' + found.mail.id + '/modify', {
+    method: 'POST',
+    headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  }, 12000, deadline);
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error('gmail modify ' + r.status + ' ' + JSON.stringify(j).slice(0, 150));
+  return { updated: true, number: found.idx, read: isRead, subject: found.mail.subject };
+}
+
+// ---------- Google Contacts (People API) tools: search and create contacts ----------
+async function getContactsAccessToken(deadline) {
+  return exchangeRefreshToken(CONTACTS_CLIENT_ID, CONTACTS_CLIENT_SECRET, CONTACTS_REFRESH_TOKEN, deadline);
+}
+
+function formatContact(person) {
+  const names = (person.names || []).map(n => n.displayName || [n.givenName, n.familyName].filter(Boolean).join(' ')).filter(Boolean);
+  const phones = (person.phoneNumbers || []).map(p => p.value).filter(Boolean);
+  const emails = (person.emailAddresses || []).map(e => e.value).filter(Boolean);
+  return {
+    name: names[0] || '(ללא שם)',
+    phones,
+    emails
+  };
+}
+
+async function searchContacts(query, deadline) {
+  if (!HAS_CONTACTS) return { error: 'contacts not configured' };
+  const q = String(query || '').trim().slice(0, 120);
+  if (!q) return { error: 'empty query' };
+  const token = await getContactsAccessToken(deadline);
+  const headers = { Authorization: 'Bearer ' + token };
+  const u = new URL('https://people.googleapis.com/v1/people:searchContacts');
+  u.searchParams.set('query', q);
+  u.searchParams.set('readMask', 'names,phoneNumbers,emailAddresses');
+  u.searchParams.set('pageSize', '8');
+  let r = await http(u.toString(), { headers }, 12000, deadline);
+  let j = await r.json().catch(() => ({}));
+  let rawPeople = (j.results || []).map(item => item.person).filter(Boolean);
+
+  // fallback to listing connections if search index is empty/warm
+  if (!r.ok && r.status !== 400) throw new Error('contacts search ' + r.status + ' ' + JSON.stringify(j).slice(0, 150));
+  if (!rawPeople.length) {
+    const lu = new URL('https://people.googleapis.com/v1/people/me/connections');
+    lu.searchParams.set('personFields', 'names,phoneNumbers,emailAddresses');
+    lu.searchParams.set('pageSize', '100');
+    const lr = await http(lu.toString(), { headers }, 12000, deadline);
+    const lj = await lr.json().catch(() => ({}));
+    if (lr.ok && Array.isArray(lj.connections)) {
+      const ql = q.toLowerCase();
+      rawPeople = lj.connections.filter(p => JSON.stringify(p).toLowerCase().includes(ql)).slice(0, 8);
+    }
+  }
+  const contacts = rawPeople.map(formatContact);
+  return { query: q, count: contacts.length, contacts };
+}
+
+async function createContact(name, phone, email, deadline) {
+  if (!HAS_CONTACTS) return { error: 'contacts not configured' };
+  const cleanName = String(name || '').trim().slice(0, 120);
+  const cleanPhone = String(phone || '').trim().slice(0, 40);
+  const cleanEmail = String(email || '').trim().slice(0, 120);
+  if (!cleanName && !cleanPhone && !cleanEmail) return { error: 'missing contact details' };
+  const token = await getContactsAccessToken(deadline);
+  const body = {};
+  if (cleanName) body.names = [{ givenName: cleanName }];
+  if (cleanPhone) body.phoneNumbers = [{ value: cleanPhone }];
+  if (cleanEmail) body.emailAddresses = [{ value: cleanEmail }];
+  const r = await http('https://people.googleapis.com/v1/people:createContact?personFields=names,phoneNumbers,emailAddresses', {
+    method: 'POST',
+    headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
+    body: JSON.stringify(body)
+  }, 12000, deadline);
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error('contacts create ' + r.status + ' ' + JSON.stringify(j).slice(0, 150));
+  return { created: true, contact: formatContact(j) };
 }
 
 const GMAIL_UNREAD_DECL = {
@@ -354,6 +554,97 @@ const GMAIL_READ_DECL = {
   name: 'gmail_read',
   description: 'Read the full text content of an email from the list already fetched in this call, or fetch unread emails with body if none were fetched yet.',
   parameters: { type: 'OBJECT', properties: { number: { type: 'INTEGER', description: 'Optional 1-based email number from the list (e.g. 1 for the first email)' } } }
+};
+
+const GMAIL_SEND_DECL = {
+  name: 'gmail_send',
+  description: 'Send an email via Gmail to a recipient email address.',
+  parameters: {
+    type: 'OBJECT',
+    properties: {
+      to: { type: 'STRING', description: 'Recipient email address' },
+      subject: { type: 'STRING', description: 'Email subject' },
+      body: { type: 'STRING', description: 'Plain text email body' },
+      threadId: { type: 'STRING', description: 'Optional Gmail thread ID when replying' }
+    },
+    required: ['to', 'subject', 'body']
+  }
+};
+
+const GMAIL_DRAFT_DECL = {
+  name: 'gmail_draft',
+  description: 'Save a draft email in Gmail.',
+  parameters: {
+    type: 'OBJECT',
+    properties: {
+      to: { type: 'STRING', description: 'Optional recipient email address' },
+      subject: { type: 'STRING', description: 'Email subject' },
+      body: { type: 'STRING', description: 'Plain text draft body' },
+      threadId: { type: 'STRING', description: 'Optional Gmail thread ID when drafting a reply' }
+    },
+    required: ['subject', 'body']
+  }
+};
+
+const GMAIL_MARK_READ_DECL = {
+  name: 'gmail_mark_read',
+  description: 'Mark an email from the fetched list as read or unread.',
+  parameters: {
+    type: 'OBJECT',
+    properties: {
+      number: { type: 'INTEGER', description: '1-based email number from the fetched list' },
+      read: { type: 'BOOLEAN', description: 'true to mark as read, false to mark as unread' }
+    },
+    required: ['number', 'read']
+  }
+};
+
+const GMAIL_TRASH_DECL = {
+  name: 'gmail_trash',
+  description: 'Move an email from the fetched list to Gmail Trash.',
+  parameters: {
+    type: 'OBJECT',
+    properties: {
+      number: { type: 'INTEGER', description: '1-based email number from the fetched list' }
+    },
+    required: ['number']
+  }
+};
+
+const GMAIL_DELETE_DECL = {
+  name: 'gmail_delete',
+  description: 'Permanently delete an email from the fetched list (cannot be undone). Call ONLY after explicit user confirmation.',
+  parameters: {
+    type: 'OBJECT',
+    properties: {
+      number: { type: 'INTEGER', description: '1-based email number from the fetched list' }
+    },
+    required: ['number']
+  }
+};
+
+const CONTACTS_SEARCH_DECL = {
+  name: 'contacts_search',
+  description: 'Search Google Contacts by name, phone number, or email address.',
+  parameters: {
+    type: 'OBJECT',
+    properties: { query: { type: 'STRING', description: 'Name, phone, or email to search for' } },
+    required: ['query']
+  }
+};
+
+const CONTACTS_CREATE_DECL = {
+  name: 'contacts_create',
+  description: 'Create a new contact in Google Contacts.',
+  parameters: {
+    type: 'OBJECT',
+    properties: {
+      name: { type: 'STRING', description: 'Contact name' },
+      phone: { type: 'STRING', description: 'Optional phone number' },
+      email: { type: 'STRING', description: 'Optional email address' }
+    },
+    required: ['name']
+  }
 };
 
 const SEARCH_DECL = {
@@ -539,12 +830,22 @@ async function takeMedia(s) {
   return r && r.name ? 'f-' + s.d + '/' + r.name : 't-' + sp('לא הצלחתי להכין את הקובץ');
 }
 
-// asks the model; when it calls a tool (web_search or play_media) the tool is run and the result is sent back, up to 3 rounds
+// asks the model; when it calls a tool, the tool is run and the result is sent back, up to 3 rounds
 async function askModel(sys, contents, deadline, s) {
   const base = { systemInstruction: { parts: [{ text: sys }] } };
   const decls = [];
   if (HAS_SEARCH) decls.push(SEARCH_DECL);
-  if (HAS_GMAIL) decls.push(GMAIL_UNREAD_DECL, GMAIL_SEARCH_DECL, GMAIL_READ_DECL);
+  if (HAS_GMAIL) decls.push(
+    GMAIL_UNREAD_DECL,
+    GMAIL_SEARCH_DECL,
+    GMAIL_READ_DECL,
+    GMAIL_SEND_DECL,
+    GMAIL_DRAFT_DECL,
+    GMAIL_MARK_READ_DECL,
+    GMAIL_TRASH_DECL,
+    GMAIL_DELETE_DECL
+  );
+  if (HAS_CONTACTS) decls.push(CONTACTS_SEARCH_DECL, CONTACTS_CREATE_DECL);
   if (HAS_FOUND) decls.push(FOUND_SEARCH_DECL, FOUND_PLAY_DECL);
   if (HAS_MEDIA) decls.push(MEDIA_DECL);
   if (!decls.length) return textGen({ ...base, contents }, deadline);
@@ -576,6 +877,27 @@ async function askModel(sys, contents, deadline, s) {
       } else if (c.functionCall.name === 'gmail_read') {
         console.log('gmail read:', String(args.number || 'all'));
         out = await readCachedMail(s, args.number, deadline).catch(e => { console.error('gmail read failed:', String(e.message).slice(0, 150)); return { error: 'gmail unavailable' }; });
+      } else if (c.functionCall.name === 'gmail_send') {
+        console.log('gmail send:', String(args.to || '').slice(0, 80));
+        out = await sendGmail(args.to, args.subject, args.body, args.threadId, deadline).catch(e => { console.error('gmail send failed:', String(e.message).slice(0, 150)); return { error: 'gmail send failed' }; });
+      } else if (c.functionCall.name === 'gmail_draft') {
+        console.log('gmail draft:', String(args.subject || '').slice(0, 80));
+        out = await createGmailDraft(args.to, args.subject, args.body, args.threadId, deadline).catch(e => { console.error('gmail draft failed:', String(e.message).slice(0, 150)); return { error: 'gmail draft failed' }; });
+      } else if (c.functionCall.name === 'gmail_mark_read') {
+        console.log('gmail mark read:', String(args.number), String(args.read));
+        out = await markGmailReadState(s, args.number, args.read, deadline).catch(e => { console.error('gmail modify failed:', String(e.message).slice(0, 150)); return { error: 'gmail modify failed' }; });
+      } else if (c.functionCall.name === 'gmail_trash') {
+        console.log('gmail trash:', String(args.number));
+        out = await trashGmail(s, args.number, deadline).catch(e => { console.error('gmail trash failed:', String(e.message).slice(0, 150)); return { error: 'gmail trash failed' }; });
+      } else if (c.functionCall.name === 'gmail_delete') {
+        console.log('gmail delete:', String(args.number));
+        out = await deleteGmailPermanently(s, args.number, deadline).catch(e => { console.error('gmail delete failed:', String(e.message).slice(0, 150)); return { error: 'gmail delete failed' }; });
+      } else if (c.functionCall.name === 'contacts_search') {
+        console.log('contacts search:', String(args.query || '').slice(0, 80));
+        out = await searchContacts(args.query, deadline).catch(e => { console.error('contacts search failed:', String(e.message).slice(0, 150)); return { error: 'contacts unavailable' }; });
+      } else if (c.functionCall.name === 'contacts_create') {
+        console.log('contacts create:', String(args.name || '').slice(0, 80));
+        out = await createContact(args.name, args.phone, args.email, deadline).catch(e => { console.error('contacts create failed:', String(e.message).slice(0, 150)); return { error: 'contacts create failed' }; });
       } else {
         console.log('search:', String(args.query || '').slice(0, 80));
         if (s) { s.searching = true; if (s.onSearch) s.onSearch(); }
@@ -1578,6 +1900,10 @@ app.get('/selftest', async (req, res) => {
     const r = await queryGmail(null, 'is:unread', 1, deadline);
     if (r.error) throw new Error(r.error);
     return ' (' + r.totalEstimate + ' הודעות שלא נקראו)';
+  });
+  if (HAS_CONTACTS) await step('Contacts (חיבור לאנשי קשר)', async () => {
+    await getContactsAccessToken(deadline);
+    return ' (מוכן)';
   });
   if (GROQ_KEYS.length) await step('חיפוש Groq (' + GROQ_KEYS.length + ' מפתחות)', async () => {
     const r = await groqSearch('weather today', '', deadline);
